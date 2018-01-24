@@ -1,6 +1,7 @@
 package org.hibernate.test.embeddable;
 
 import org.hibernate.Criteria;
+import org.hibernate.Hibernate;
 import org.hibernate.query.NativeQuery;
 import org.hibernate.testing.TestForIssue;
 import org.hibernate.testing.junit4.BaseCoreFunctionalTestCase;
@@ -22,11 +23,11 @@ public class FetchEmbeddableCollectionElementEagerTest extends BaseCoreFunctiona
 
   @Override
   protected Class<?>[] getAnnotatedClasses() {
-    return new Class[]{Chart.class};
+    return new Class[]{Chart.class, TreasureMap.class};
   }
 
   @Test
-  public void test() {
+  public void testExplicitFetch() {
     doInHibernate(this::sessionFactory, session -> {
       Chart chart = new Chart();
       chart.points = Arrays.asList(new Point(1, 1), new Point(2, 2));
@@ -47,7 +48,29 @@ public class FetchEmbeddableCollectionElementEagerTest extends BaseCoreFunctiona
       charts.addAll(queryResult);
     });
     Assert.assertEquals(1, charts.size());
+    Assert.assertTrue(Hibernate.isInitialized(charts.get(0).points));
     Assert.assertEquals(2, charts.get(0).points.size());
+  }
+
+  @Test
+  public void testImplicitFetch() {
+    doInHibernate(this::sessionFactory, session -> {
+      TreasureMap treasureMap = new TreasureMap();
+      treasureMap.points = Arrays.asList(new Point(1, 1), new Point(2, 2));
+      session.save(treasureMap);
+    });
+
+    List<TreasureMap> treasureMaps = new ArrayList<>();
+    doInHibernate(this::sessionFactory, session -> {
+      NativeQuery<TreasureMap> query = session.createNativeQuery(
+          "SELECT * FROM treasure_maps", TreasureMap.class);
+      List<TreasureMap> queryResult = query.getResultList();
+      treasureMaps.addAll(queryResult);
+    });
+
+    Assert.assertEquals(1, treasureMaps.size());
+    Assert.assertTrue(Hibernate.isInitialized(treasureMaps.get(0).points));
+    Assert.assertEquals(2, treasureMaps.get(0).points.size());
   }
 
   /**
@@ -65,6 +88,25 @@ public class FetchEmbeddableCollectionElementEagerTest extends BaseCoreFunctiona
     @CollectionTable(
         name = "chart_points",
         joinColumns=@JoinColumn(name = "chart_id")
+    )
+    List<Point> points;
+  }
+
+  /**
+   * @author Ivan Golovko
+   */
+  @Entity
+  @Table(name = "treasure_maps")
+  public static class TreasureMap {
+
+    @Id
+    @GeneratedValue
+    Integer id;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+        name = "treasure_map__points",
+        joinColumns=@JoinColumn(name = "treasure_map_id")
     )
     List<Point> points;
   }
